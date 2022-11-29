@@ -1,16 +1,15 @@
 import socket
 import select
-import time
 import sys
 import struct
-# from multiprocessing.dummy import Pool as ThreadPool
 import threading
 
 # Changing the buffer_size and delay, you can improve the speed and bandwidth.
-# But when buffer get to high or delay go too down, you can broke things
 buffer_size = 4096
 delay = 0.00001
-forward_to = ('127.0.0.1', 1235)
+
+# Global forwarding address. Set this to localhsot and 1234
+forward_to = ('127.0.0.1', 1234)
 
 db_limit = -10.0
 
@@ -26,7 +25,7 @@ class Forward:
             print(e)
             return False
 
-class TheServer:
+class Server:
     input_list = []
     channel = {}
 
@@ -49,9 +48,12 @@ class TheServer:
 
     def main_loop(self):
 
+        """Starts the main proxy server."""
+
         self.input_list.append(self.server)
 
         while 1:
+
             # time.sleep(delay)
             ss = select.select
             inputready, outputready, exceptready = ss(self.input_list, [], [])
@@ -71,11 +73,11 @@ class TheServer:
                     self.on_close()
                     break
                 else:
-
-                    # tasks = [self.inject, self.data_f]
                     self.on_recv()
 
     def inject(self):
+
+        """This function contains all of the logic for selecting peaks from the rtl_power input."""
 
 
         low_freq = 0
@@ -90,12 +92,6 @@ class TheServer:
             max_index = db.index(max(db))
             max_value = max(db)
             freq = int(start_freq) + max_index * float(step)
-
-
-            # print(max_value)
-
-
-                # print(self.top_Freq["freq"], self.top_Freq["dBm"])
 
             if float(start_freq) >= low_freq:
                 # print(low_freq)
@@ -131,39 +127,39 @@ class TheServer:
             clientsock.close()
 
     def on_close(self):
+
         print(self.s.getpeername(), "has disconnected")
+
         #remove objects from input_list
         self.input_list.remove(self.s)
         self.input_list.remove(self.channel[self.s])
         out = self.channel[self.s]
+
         # close the connection with client
         self.channel[out].close()  # equivalent to do self.s.close()
+
         # close the connection with remote server
         self.channel[self.s].close()
+
         # delete both objects from channel dict
         del self.channel[out]
         del self.channel[self.s]
 
     def on_recv(self):
 
-        # data = self.data
-        # here we can parse and/or modify the data before send forward
-        # print("[*] on_recv data")
-        # print(self.data)
         self.channel[self.s].send(self.data)
 
     def send_command(self, command, param):
 
-        # print("cmd")
         cmd = struct.pack(">BI", command, param)
-        # print(cmd)
-
         self.forward.send(cmd)
 
 
 
 if __name__ == '__main__':
-        server = TheServer('127.0.0.1', 1236)
+
+        # this is the IP:port that the external SDR software will conenct to.
+        server = Server('127.0.0.1', 1236)
         try:
             server.main_loop()
         except KeyboardInterrupt:
