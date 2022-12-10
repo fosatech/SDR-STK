@@ -1,8 +1,29 @@
+"""
+
+Options
+
+-h : display help
+-o : input rtl_power options as string
+-p : no rtl_power options, run in pipe mode (Windoze compatability) #!! need to test on Win
+-s : server IP (default localhost)
+-p : server port (default 1236)
+-f : forward IP (default localhost)
+-a : forward port (default 1234)
+
+Example:
+
+python stk_sweep.py -o "-f 420M:500M:5k -g 1 -i 1s"
+
+rtl_power -f 420M:500M:5k -g 1 -i 1s | python stk_sweep.py -p
+
+"""
+
 import socket
 import select
 import sys
 import struct
 import threading
+import time
 
 # Changing the buffer_size and delay, you can improve the speed and bandwidth.
 buffer_size = 4096
@@ -54,7 +75,7 @@ class Server:
 
         while 1:
 
-            # time.sleep(delay)
+            time.sleep(delay)
             ss = select.select
             inputready, outputready, exceptready = ss(self.input_list, [], [])
 
@@ -63,8 +84,11 @@ class Server:
                 if self.s == self.server:
                     self.on_accept()
 
+                    print("accept")
+
                     get_args = threading.Thread(target=self.inject, name="Inject")
                     get_args.start()
+
 
                     break
 
@@ -74,6 +98,9 @@ class Server:
                     break
                 else:
                     self.on_recv()
+
+            # if start_case is True:
+            # start_case = False
 
     def inject(self):
 
