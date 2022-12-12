@@ -24,6 +24,7 @@ import sys
 import struct
 import threading
 import time
+import argparse
 
 # Changing the buffer_size and delay, you can improve the speed and bandwidth.
 buffer_size = 4096
@@ -33,6 +34,27 @@ delay = 0.00001
 forward_to = ('127.0.0.1', 1234)
 
 db_limit = -10.0
+
+epilog_example = """
+Examples:
+
+    python stk_sweep.py -o "-f 420M:500M:5k -g 1 -i 2s"
+
+    rtl_power -f 420M:500M:5k -g 1 -i 1s | python stk_sweep.py -p
+
+"""
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog = 'rtl_sweep',
+        description = 'An rtl_power utility that detects dBm peaks and passes the freqency to an rtl_tcp instance.',
+        epilog = epilog_example)
+
+    parser.add_argument('-o' dest='options', type=str, default=None,
+        help='Input rtl_power options as a string.')
+    parser.add_argument('-p' dest='pipe', action='store_true',
+        help='No rtl_power options, run in pipe mode.')
+
 
 class Forward:
     def __init__(self):
