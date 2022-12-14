@@ -1,23 +1,3 @@
-"""
-
-Options
-
--h : display help
--o : input rtl_power options as string
--p : no rtl_power options, run in pipe mode (Windoze compatability) #!! need to test on Win
--s : server IP (default localhost)
--p : server port (default 1236)
--f : forward IP (default localhost)
--a : forward port (default 1234)
-
-Example:
-
-python stk_sweep.py -o "-f 420M:500M:5k -g 1 -i 1s"
-
-rtl_power -f 420M:500M:5k -g 1 -i 1s | python stk_sweep.py -p
-
-"""
-
 import socket
 import select
 import sys
@@ -25,35 +5,17 @@ import struct
 import threading
 import time
 import argparse
-
-# Changing the buffer_size and delay, you can improve the speed and bandwidth.
-buffer_size = 4096
-delay = 0.00001
-
-# Global forwarding address. Set this to localhsot and 1234
-forward_to = ('127.0.0.1', 1234)
-
-db_limit = -10.0
+import subprocess
 
 epilog_example = """
-Examples:
-
-    python stk_sweep.py -o "-f 420M:500M:5k -g 1 -i 2s"
-
-    rtl_power -f 420M:500M:5k -g 1 -i 1s | python stk_sweep.py -p
-
+Examples:\n
+\n
+    python stk_sweep.py -o "-f 420M:500M:5k -g 1 -i 2s" \n
+\n
+    rtl_power -f 420M:500M:5k -g 1 -i 1s | python stk_sweep.py -p \n
+\n
 """
 
-def build_parser():
-    parser = argparse.ArgumentParser(
-        prog = 'rtl_sweep',
-        description = 'An rtl_power utility that detects dBm peaks and passes the freqency to an rtl_tcp instance.',
-        epilog = epilog_example)
-
-    parser.add_argument('-o' dest='options', type=str, default=None,
-        help='Input rtl_power options as a string.')
-    parser.add_argument('-p' dest='pipe', action='store_true',
-        help='No rtl_power options, run in pipe mode.')
 
 
 class Forward:
@@ -69,100 +31,161 @@ class Forward:
             return False
 
 class Server:
-    input_list = []
-    channel = {}
 
-    def __init__(self, host, port):
+    def __init__(self):
 
         self.SET_FREQUENCY = 0x01
 
         self.top_Freq = {
-            "freq" : 400000000,
+            "freq" : 0,
             "dBm" : "0"
         }
 
-        self.forward = 0
+
+        self.buffer_size = 4096
+        self.delay = 0.0001
+
+        self.args = self._build_parser()
+
+        self.power_args = ['rtl_power']
+        self.power_args += self.args.options.split(' ')
+
+        self._build_rtl_tcp()
+
+        self.forward_ip = self.args.client_ip
+        self.forward_port = self.args.client_port
+
+        self.input_list = []
+        self.channel = {}
+
+        self.forward = None
 
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server.bind((host, port))
+        self.server.bind((self.args.serv_ip, self.args.serv_port))
         self.server.listen(200)
 
 
-    def main_loop(self):
+    def main(self):
 
         """Starts the main proxy server."""
 
         self.input_list.append(self.server)
+        case_init = True
 
         while 1:
 
-            time.sleep(delay)
+            time.sleep(self.delay)
             ss = select.select
             inputready, outputready, exceptready = ss(self.input_list, [], [])
 
-
             for self.s in inputready:
                 if self.s == self.server:
-                    self.on_accept()
-
                     print("accept")
+                    self._on_accept()
 
-                    get_args = threading.Thread(target=self.inject, name="Inject")
-                    get_args.start()
+                    get_data = threading.Thread(target=self._inject, name="Inject")
+                    get_data.start()
 
 
                     break
 
-                self.data = self.s.recv(buffer_size)
+                self.data = self.s.recv(self.buffer_size)
                 if len(self.data) == 0:
-                    self.on_close()
+                    self._on_close()
                     break
                 else:
-                    self.on_recv()
+                    self._on_recv()
 
             # if start_case is True:
             # start_case = False
 
-    def inject(self):
+    def kill_all(self):
+
+        self.tcp_process.kill()
+        self.power_process.kill()
+
+    def _build_rtl_tcp(self):
+
+        self.tcp_process = subprocess.Popen(['rtl_tcp', '-d', '1', '-a', str(self.args.client_ip), '-p', str(self.args.client_port)], stdout=subprocess.PIPE)
+
+
+    def _build_parser(self):
+
+        parser = argparse.ArgumentParser(
+            prog = 'rtl_sweep',
+            description = 'An rtl_power utility that detects dBm peaks and passes the freqency to an rtl_tcp instance.',
+            epilog = epilog_example)
+
+        parser.add_argument('-o', dest='options', type=str, default=None,
+            help='Input rtl_power options as a string.')
+        parser.add_argument('-i', dest='pipe', action='store_true',
+            help='No rtl_power options, run in pipe mode.')
+        parser.add_argument('-s', dest='serv_ip', default='127.0.0.1',
+            help='Server IP address (default: localhost)')
+        parser.add_argument('-p', dest='serv_port', default=1236,
+            help='Server Port (default: 1236)')
+        parser.add_argument('-c', dest='client_ip', default='127.0.0.1',
+            help='Client IP (default: localhost)')
+        parser.add_argument('-a', dest='client_port', default=1234,
+            help='Client Port (default: 1234)')
+        parser.add_argument('-d', dest='db_limit', default=0,
+            help='Set dBm peak detect limit (default: 0dBm)')
+        parser.add_argument('-v', dest='logging', action='store_const',
+            const=True, default=False,
+            help='Enable freqency and dBm logging in the console')
+
+        return parser.parse_args()
+
+
+    def _run_power(self):
+
+        return
+
+
+    def _inject(self):
 
         """This function contains all of the logic for selecting peaks from the rtl_power input."""
 
+        self.power_process = subprocess.Popen(self.power_args, stdout=subprocess.PIPE)
 
         low_freq = 0
 
-        for i in sys.stdin:
-            input = (i.split(', '))
+        while True:
+            output = self.power_process.stdout.readline()
+            if self.power_process.poll() is not None:
+                break
+            if output:
 
-            start_freq = input[2]
-            step = input[4]
-            db = input[6:]
+                input = output.decode().split(', ')
 
-            max_index = db.index(max(db))
-            max_value = max(db)
-            freq = int(start_freq) + max_index * float(step)
+                start_freq = input[2]
+                step = input[4]
+                db = input[6:]
 
-            if float(start_freq) >= low_freq:
-                # print(low_freq)
-                low_freq = float(start_freq)
+                max_index = db.index(max(db))
+                max_value = max(db)
+                freq = int(start_freq) + max_index * float(step)
 
+                if float(start_freq) >= low_freq:
+                    low_freq = float(start_freq)
 
+                    self._send_command(self.SET_FREQUENCY, int(self.top_Freq["freq"]))
 
-                set_freq = str(freq).split(".")[0]
-                print(self.top_Freq["freq"], self.top_Freq["dBm"])
+                    if self.args.logging is True:
+                        print(self.top_Freq["freq"], self.top_Freq["dBm"])
 
-
-                self.send_command(self.SET_FREQUENCY, int(self.top_Freq["freq"]))
-
-                self.top_Freq["dBm"] = str(db_limit)
-
-            if max_value > self.top_Freq["dBm"] :
-                self.top_Freq["freq"] = freq
-                self.top_Freq["dBm"] = max_value
+                    self.top_Freq["dBm"] = str(self.args.db_limit)
 
 
-    def on_accept(self):
-        self.forward = Forward().start(forward_to[0], forward_to[1])
+                if max_value > self.top_Freq["dBm"] :
+                    self.top_Freq["freq"] = freq
+                    self.top_Freq["dBm"] = max_value
+
+
+    def _on_accept(self):
+
+        self.forward = Forward().start(self.forward_ip, self.forward_port)
         clientsock, clientaddr = self.server.accept()
         if self.forward:
             print(clientaddr, "has connected")
@@ -175,7 +198,7 @@ class Server:
             print("Closing connection with client side", clientaddr)
             clientsock.close()
 
-    def on_close(self):
+    def _on_close(self):
 
         print(self.s.getpeername(), "has disconnected")
 
@@ -194,11 +217,11 @@ class Server:
         del self.channel[out]
         del self.channel[self.s]
 
-    def on_recv(self):
+    def _on_recv(self):
 
         self.channel[self.s].send(self.data)
 
-    def send_command(self, command, param):
+    def _send_command(self, command, param):
 
         cmd = struct.pack(">BI", command, param)
         self.forward.send(cmd)
@@ -208,9 +231,10 @@ class Server:
 if __name__ == '__main__':
 
         # this is the IP:port that the external SDR software will conenct to.
-        server = Server('127.0.0.1', 1236)
+        server = Server()
         try:
-            server.main_loop()
-        except KeyboardInterrupt:
-            print("Ctrl C - Stopping server")
+            server.main()
+        except (Exception, KeyboardInterrupt):
+            server.kill_all()
+            print("[!] Interrupt - Stopping server")
             sys.exit(1)
