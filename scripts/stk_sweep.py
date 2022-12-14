@@ -7,14 +7,7 @@ import time
 import argparse
 import subprocess
 
-epilog_example = """
-Examples:\n
-\n
-    python stk_sweep.py -o "-f 420M:500M:5k -g 1 -i 2s" \n
-\n
-    rtl_power -f 420M:500M:5k -g 1 -i 1s | python stk_sweep.py -p \n
-\n
-"""
+epilog_example = """Examples: [[ python stk_sweep.py -o "-f 420M:500M:5k -g 1 -i 2s" ]] or  [[ rtl_power -f 420M:500M:5k -g 1 -i 1s | python stk_sweep.py -p ]]"""
 
 
 
@@ -97,13 +90,12 @@ class Server:
                 else:
                     self._on_recv()
 
-            # if start_case is True:
-            # start_case = False
 
     def kill_all(self):
 
         self.tcp_process.kill()
         self.power_process.kill()
+
 
     def _build_rtl_tcp(self):
 
@@ -136,11 +128,6 @@ class Server:
             help='Enable freqency and dBm logging in the console')
 
         return parser.parse_args()
-
-
-    def _run_power(self):
-
-        return
 
 
     def _inject(self):
@@ -198,6 +185,7 @@ class Server:
             print("Closing connection with client side", clientaddr)
             clientsock.close()
 
+
     def _on_close(self):
 
         print(self.s.getpeername(), "has disconnected")
@@ -217,9 +205,11 @@ class Server:
         del self.channel[out]
         del self.channel[self.s]
 
+
     def _on_recv(self):
 
         self.channel[self.s].send(self.data)
+        
 
     def _send_command(self, command, param):
 
